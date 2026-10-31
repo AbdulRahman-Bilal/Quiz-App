@@ -1,153 +1,97 @@
-import Quiz from './quiz.js';
-import Question from './question.js';
+import Quiz from "./quiz.js";
+import Question from "./question.js";
 
-const quizOptionsForm = document.getElementById("quizOptions");
+// ===== DOM =====
+const quizForm = document.getElementById("quizOptions");
 const playerNameInput = document.getElementById("playerName");
 const categoryInput = document.getElementById("categoryMenu");
-const difficultyOptions = document.getElementById("difficultyOptions");
+const difficultyInput = document.getElementById("difficultyOptions");
 const questionsNumber = document.getElementById("questionsNumber");
 const startQuizBtn = document.getElementById("startQuiz");
-const questionsContainer = document.querySelector(".questions-container");
+const questionsContainer = document.getElementById("questionsContainer");
+
 let currentQuiz = null;
 
+// ===== Loading & Error =====
 function showLoading() {
-  const loadingHtml = `
+  questionsContainer.innerHTML = `
     <div class="loading-overlay">
       <div class="loading-spinner"></div>
       <p class="loading-text">Loading Questions...</p>
-    </div>
-  `;
-  questionsContainer.innerHTML = loadingHtml;
-}
-
-function hideLoading() {
-  const loadingOverlay = document.querySelector(".loading-overlay");
-  if (loadingOverlay) {
-    loadingOverlay.classList.add("hidden");
-  }
+    </div>`;
 }
 
 function showError(message) {
-  const errorHtml = `
+  questionsContainer.innerHTML = `
     <div class="game-card error-card">
-      <div class="error-icon">
-        <i class="fa-solid fa-triangle-exclamation"></i>
-      </div>
+      <div class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
       <h3 class="error-title">Oops! Something went wrong</h3>
-      <p class="error-message">${message}. Please try again.</p>
+      <p class="error-message">${message}</p>
       <button class="btn-play retry-btn">
         <i class="fa-solid fa-rotate-right"></i> Try Again
       </button>
-    </div>
-  `;
-  questionsContainer.innerHTML = errorHtml;
-  const retryBtn = document.querySelector(".retry-btn");
-  if (retryBtn) {
-    retryBtn.addEventListener("click", resetToStart);
-  }
+    </div>`;
+  questionsContainer.querySelector(".retry-btn").addEventListener("click", resetToStart);
 }
 
+// ===== Validation =====
 function validateForm() {
-  if (
-    questionsNumber.value != null &&
-    questionsNumber.value !== '' &&
-    questionsNumber.value >= 1 &&
-    questionsNumber.value <= 50
-  ) {
-    return { isValid: true, error: null };
-  }
-  return { isValid: false, error: 'Please enter a number between 1 and 50.' };
+  const value = questionsNumber.value;
+  if (value === "") return "Please enter the number of questions.";
+  if (Number(value) < 1) return "Minimum is 1 question.";
+  if (Number(value) > 50) return "Maximum is 50 questions.";
+  return null;
 }
 
-function showFormError() {
-  const errorDiv = `
-    <div class="form-error">
-      <i class="fa-solid fa-circle-exclamation"></i> Please enter the number of questions.
-    </div>
-  `;
-  document.getElementById("errorDiv").innerHTML = errorDiv;
-  setTimeout(() => {
-    const errorDivHtml = document.getElementById("errorDiv");
-    errorDivHtml.style.transition = 'opacity 1s ease';
-    errorDivHtml.style.opacity = '0';
-    errorDivHtml.classList.add("hidden");
-  }, 3000);
+function showFormError(message) {
+  const old = quizForm.querySelector(".form-error");
+  if (old) old.remove();
+
+  const div = document.createElement("div");
+  div.className = "form-error";
+  div.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${message}`;
+  startQuizBtn.before(div);
+
+  setTimeout(() => div.remove(), 3000);
 }
 
-function resetCustomSelect(selectId, defaultValue, defaultText, defaultIconClass) {
-  const select = document.getElementById(selectId);
-  if (!select) return;
-  const hiddenInput = select.parentElement.querySelector('input[type="hidden"]');
-  const textSpan = select.querySelector('.custom-select-text');
-  const iconSpan = select.querySelector('.custom-select-icon');
-  const options = select.querySelectorAll('.custom-select-option');
-
-  select.dataset.value = defaultValue;
-  if (hiddenInput) hiddenInput.value = defaultValue;
-  if (textSpan) textSpan.textContent = defaultText;
-  if (iconSpan) iconSpan.innerHTML = `<i class="${defaultIconClass}"></i>`;
-
-  options.forEach(o => o.classList.remove('selected'));
-  const defaultOption = select.querySelector(`.custom-select-option[data-value="${defaultValue}"]`);
-  if (defaultOption) defaultOption.classList.add('selected');
-}
-
+// ===== Reset =====
 function resetToStart() {
-  questionsContainer.innerHTML = '';
-  playerNameInput.value = '';
-  categoryInput.value = '';
-  difficultyOptions.value = 'easy';
-  questionsNumber.value = 10;
-
-  resetCustomSelect('categorySelect', '', 'Random Category', 'fa-solid fa-shuffle');
-  resetCustomSelect('difficultySelect', 'easy', 'Easy Mode', 'fa-solid fa-face-smile');
-
-  quizOptionsForm.classList.remove("hidden");
+  questionsContainer.innerHTML = "";
+  quizForm.style.display = "";
   currentQuiz = null;
 }
 
+// ===== Start =====
 async function startQuiz() {
-  const userText = questionsNumber.value;
-  const questionNumberRegex = /^(?:[1-9]|[1-4][0-9]|50)$/;
-  if (!questionNumberRegex.test(userText)) {
-    showFormError();
+  const error = validateForm();
+  if (error) {
+    showFormError(error);
     return;
   }
 
-  let playerName;
-  if (!playerNameInput.value) {
-    playerName = 'Player';
-  } else {
-    playerName = playerNameInput.value;
-  }
+  currentQuiz = new Quiz(
+    playerNameInput.value.trim() || "Player",
+    categoryInput.value,
+    difficultyInput.value,
+    Number(questionsNumber.value)
+  );
 
-  const category = categoryInput.value;
-  const difficulty = difficultyOptions.value;
-  const numberOfQuestions = questionsNumber.value;
-
-  currentQuiz = new Quiz(category, difficulty, numberOfQuestions, playerName);
-  quizOptionsForm.classList.add("hidden");
+  quizForm.style.display = "none";
   showLoading();
 
   try {
     await currentQuiz.getQuestions();
-    hideLoading();
-    if (currentQuiz.questions.length === 0) {
-      showError("No questions found. Please try different options.");
-      return;
-    }
     const firstQuestion = new Question(currentQuiz, questionsContainer, resetToStart);
     firstQuestion.displayQuestion();
-  } catch (error) {
-    hideLoading();
-    showError("Something went wrong while fetching questions. Please try again.");
+  } catch (err) {
+    showError(err.message);
   }
 }
 
+// ===== Events =====
+quizForm.addEventListener("submit", (e) => e.preventDefault());
 startQuizBtn.addEventListener("click", startQuiz);
-
 questionsNumber.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    startQuiz();
-  }
+  if (e.key === "Enter") startQuiz();
 });
