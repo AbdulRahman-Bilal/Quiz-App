@@ -1,123 +1,67 @@
 export default class Quiz {
-  constructor(category, difficulty, numberOfQuestions, playerName) {
+  constructor(playerName, category, difficulty, numberOfQuestions) {
+    this.playerName = playerName;
     this.category = category;
     this.difficulty = difficulty;
     this.numberOfQuestions = numberOfQuestions;
-    this.playerName = playerName;
-    this.score = 0;
     this.questions = [];
     this.currentQuestionIndex = 0;
+    this.score = 0;
   }
-  
-  //ana lazm 2abl al variables asta5dm let/const wa 2abl ay function a3mlha 2aktb This
+
   async getQuestions() {
-    const apiUrl = this.buildApiUrl();
-    const res = await fetch(apiUrl);
-
-    if (!res.ok) {
-      throw new Error(`HTTP error! Status: ${res.status}`);
+    let url = `https://opentdb.com/api.php?amount=${this.numberOfQuestions}&difficulty=${this.difficulty}`;
+    if (this.category) {
+      url += `&category=${this.category}`;
     }
 
-    const dataFromApi = await res.json();
+    const response = await fetch(url);
+    const data = await response.json();
 
-    if (dataFromApi.response_code === 0) {
-      this.questions = dataFromApi.results;
-    } else {
-      throw new Error(`API returned response_code ${dataFromApi.response_code}`);
+    if (data.response_code === 5) {
+      throw new Error("Too many requests. Wait 5 seconds and try again.");
+    }
+    if (data.response_code !== 0) {
+      throw new Error("Not enough questions for these options. Try fewer questions.");
     }
 
-    return this.questions;
+    this.questions = data.results;
   }
 
-  buildApiUrl() {
-    const params = new URLSearchParams({
-      amount: this.numberOfQuestions,
-      category: this.category,
-      difficulty: this.difficulty,
-    });
-    return `https://opentdb.com/api.php?${params.toString()}`;
+  getCurrentQuestion() {
+    return this.questions[this.currentQuestionIndex];
   }
 
   incrementScore() {
     this.score++;
   }
-  // ana bakarn  this.currentQuestionIndex b this.questions.length m4 b numberOfQuestions 34an ana bakarn b 3dd questions aly wesltlha
-  getCurrentQuestion() {
-    if (this.currentQuestionIndex >= 0 && this.currentQuestionIndex < this.questions.length) {
-      return this.questions[this.currentQuestionIndex];
-    }
-    return null;
-  }
 
   nextQuestion() {
     this.currentQuestionIndex++;
-    return !this.isComplete(); // lazm this
-  }
-
-  isComplete() {
-    return this.currentQuestionIndex >= this.questions.length;
-  }
-
-  getScorePercentage() {
-    return Math.round((this.score / this.numberOfQuestions) * 100);
-  }
-
-  saveHighScore() {
-    const highScores = this.getHighScores();
-
-    const newScoreObject = {
-      name: this.playerName,
-      score: this.score,
-      total: this.numberOfQuestions,
-      percentage: this.getScorePercentage(),
-      difficulty: this.difficulty,
-      date: new Date().toLocaleDateString(),
-    };
-
-    highScores.push(newScoreObject);
-
-    const updatedHighScores = highScores
-      .sort((a, b) => b.percentage - a.percentage)
-      .slice(0, 10);
-
-    localStorage.setItem("quizHighScores", JSON.stringify(updatedHighScores));
-    return updatedHighScores;
-  }
-
-  getHighScores() {
-    try {
-      const highScores = JSON.parse(localStorage.getItem("quizHighScores"));
-      return Array.isArray(highScores) ? highScores : [];
-    } catch {
-      console.log("An error has occurred while reading high scores.");
-      return [];
-    }
-  }
-
-  isHighScore() {
-    const highScores = this.getHighScores();
-    if (highScores.length < 10) return true;
-
-    const lowestScore = highScores[highScores.length - 1];
-    return this.getScorePercentage() > lowestScore.percentage;
+    return this.currentQuestionIndex < this.questions.length;
   }
 
   endQuiz() {
-    const percentage = this.getScorePercentage();
-    const qualifies = this.isHighScore();
-    const highScores = qualifies ? this.saveHighScore() : this.getHighScores();
+    const percentage = Math.round((this.score / this.numberOfQuestions) * 100);
 
-    const medalClasses = ["gold", "silver", "bronze"];
-    const leaderboardItems = highScores
-      .map((entry, index) => {
-        const medalClass = medalClasses[index] || "";
-        return `
-          <li class="leaderboard-item ${medalClass}">
-            <span class="leaderboard-rank">#${index + 1}</span>
-            <span class="leaderboard-name">${entry.name}</span>
-            <span class="leaderboard-score">${entry.percentage}%</span>
-          </li>`;
-      })
+    const oldScores = JSON.parse(localStorage.getItem("leaderboard")) || [];
+    const isRecord = percentage > 0 && oldScores.every((p) => percentage > p.percentage);
+
+    oldScores.push({ name: this.playerName, percentage });
+    oldScores.sort((a, b) => b.percentage - a.percentage);
+    const top3 = oldScores.slice(0, 3);
+    localStorage.setItem("leaderboard", JSON.stringify(top3));
+
+    const medals = ["gold", "silver", "bronze"];
+    const rows = top3
+      .map(
+        (p, i) => `
+        <li class="leaderboard-item ${medals[i]}">
+          <span class="leaderboard-rank">#${i + 1}</span>
+          <span class="leaderboard-name">${p.name}</span>
+          <span class="leaderboard-score">${p.percentage}%</span>
+        </li>`
+      )
       .join("");
 
     return `
@@ -125,27 +69,14 @@ export default class Quiz {
         <h2 class="results-title">Quiz Complete!</h2>
         <p class="results-score-display">${this.score}/${this.numberOfQuestions}</p>
         <p class="results-percentage">${percentage}% Accuracy</p>
-
-        ${qualifies ? `
-        <div class="new-record-badge">
-          <i class="fa-solid fa-star"></i> New High Score!
-        </div>` : ""}
-
+        ${isRecord ? `<div class="new-record-badge"><i class="fa-solid fa-star"></i> New High Score!</div>` : ""}
         <div class="leaderboard">
-          <h4 class="leaderboard-title">
-            <i class="fa-solid fa-trophy"></i> Leaderboard
-          </h4>
-          <ul class="leaderboard-list">
-            ${leaderboardItems}
-          </ul>
+          <h4 class="leaderboard-title"><i class="fa-solid fa-trophy"></i> Leaderboard</h4>
+          <ul class="leaderboard-list">${rows}</ul>
         </div>
-
         <div class="action-buttons">
-          <button class="btn-restart">
-            <i class="fa-solid fa-rotate-right"></i> Play Again
-          </button>
+          <button class="btn-restart"><i class="fa-solid fa-rotate-right"></i> Play Again</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }
 }
