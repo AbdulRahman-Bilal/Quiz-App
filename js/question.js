@@ -1,3 +1,5 @@
+let audioCtx;
+
 export default class Question {
   constructor(quiz, container, onQuizEnd) {
     this.quiz = quiz;
@@ -8,135 +10,131 @@ export default class Question {
     this.question = this.decodeHtml(this.questionData.question);
     this.correctAnswer = this.decodeHtml(this.questionData.correct_answer);
     this.category = this.decodeHtml(this.questionData.category);
-    this.wrongAnswers = this.questionData.incorrect_answers.map(answer => this.decodeHtml(answer));
+    this.wrongAnswers = this.questionData.incorrect_answers.map((a) => this.decodeHtml(a));
     this.allAnswers = this.shuffleAnswers();
     this.answered = false;
     this.timerInterval = null;
     this.timeRemaining = 15;
-
-    this.handleKeydown = this.handleKeydown.bind(this);
+    this.handleKey = this.handleKey.bind(this);
   }
 
   decodeHtml(html) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
+    const doc = new DOMParser().parseFromString(html, "text/html");
     return doc.documentElement.textContent;
   }
 
+  escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   shuffleAnswers() {
-    const allAnswers = [...this.wrongAnswers, this.correctAnswer];
-    for (let i = allAnswers.length - 1; i > 0; i--) {
+    const array = [...this.wrongAnswers, this.correctAnswer];
+    for (let i = array.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [allAnswers[i], allAnswers[j]] = [allAnswers[j], allAnswers[i]];
+      [array[i], array[j]] = [array[j], array[i]];
     }
-    return allAnswers;
+    return array;
   }
 
   getProgress() {
-    return Math.round((this.index / this.quiz.numberOfQuestions) * 100);
+    return Math.round(((this.index + 1) / this.quiz.numberOfQuestions) * 100);
   }
 
   displayQuestion() {
-    let allAnswersStracture = '<div class="answers-grid">';
-    for (let i = 0; i < this.allAnswers.length; i++) {
-      allAnswersStracture += `
-        <button class="answer-btn" data-answer="${this.allAnswers[i]}">
+    const icons = { easy: "face-smile", medium: "face-meh", hard: "skull" };
+    const difficulty = this.questionData.difficulty;
+
+    const answersHtml = this.allAnswers
+      .map(
+        (answer, i) => `
+        <button class="answer-btn">
           <span class="answer-key">${i + 1}</span>
-          <span class="answer-text">${this.allAnswers[i]}</span>
-        </button>`;
-    }
-    allAnswersStracture += '</div>';
+          <span class="answer-text">${this.escapeHtml(answer)}</span>
+        </button>`
+      )
+      .join("");
 
-    const questionCard = `
-      <div class="xp-bar-container">
-        <div class="xp-bar-header">
-          <span class="xp-label"><i class="fa-solid fa-bolt"></i> Progress</span>
-          <span class="xp-value">Question ${this.index + 1}/${this.quiz.numberOfQuestions}</span>
+    this.container.innerHTML = `
+      <div class="game-card question-card">
+        <div class="xp-bar-container">
+          <div class="xp-bar-header">
+            <span class="xp-label"><i class="fa-solid fa-bolt"></i> Progress</span>
+            <span class="xp-value">Question ${this.index + 1}/${this.quiz.numberOfQuestions}</span>
+          </div>
+          <div class="xp-bar">
+            <div class="xp-bar-fill" style="width: ${this.getProgress()}%"></div>
+          </div>
         </div>
-        <div class="xp-bar">
-          <div class="xp-bar-fill" style="width: ${this.getProgress()}%"></div>
-        </div>
-      </div>
 
-      <div class="stats-row">
-        <div class="stat-badge category">
-          <i class="fa-solid fa-bookmark"></i>
-          <span>${this.category}</span>
+        <div class="stats-row">
+          <div class="stat-badge category">
+            <i class="fa-solid fa-bookmark"></i>
+            <span>${this.escapeHtml(this.category)}</span>
+          </div>
+          <div class="stat-badge difficulty ${difficulty}">
+            <i class="fa-solid fa-${icons[difficulty]}"></i>
+            <span>${difficulty}</span>
+          </div>
+          <div class="stat-badge timer">
+            <i class="fa-solid fa-stopwatch"></i>
+            <span class="timer-value">${this.timeRemaining}</span>s
+          </div>
+          <div class="stat-badge counter">
+            <i class="fa-solid fa-gamepad"></i>
+            <span>${this.index + 1}/${this.quiz.numberOfQuestions}</span>
+          </div>
         </div>
-        <div class="stat-badge difficulty ${this.quiz.difficulty}">
-          <i class="fa-solid fa-face-smile"></i>
-          <span>${this.quiz.difficulty}</span>
-        </div>
-        <div class="stat-badge timer">
-          <i class="fa-solid fa-stopwatch"></i>
-          <span class="timer-value">${this.timeRemaining}</span>s
-        </div>
-        <div class="stat-badge counter">
-          <i class="fa-solid fa-gamepad"></i>
-          <span>${this.index + 1}/${this.quiz.numberOfQuestions}</span>
-        </div>
-      </div>
 
-      <h2 class="question-text">${this.question}</h2>
-      ${allAnswersStracture}
-      <p class="keyboard-hint">
-        <i class="fa-regular fa-keyboard"></i> Press 1-${this.allAnswers.length} to select
-      </p>
-      <div id="time-up-warning"></div>
-      <div class="score-panel">
-        <div class="score-item">
-          <div class="score-item-label">Score</div>
-          <div class="score-item-value">${this.quiz.score}</div>
+        <h2 class="question-text">${this.escapeHtml(this.question)}</h2>
+
+        <div class="answers-grid">${answersHtml}</div>
+
+        <p class="keyboard-hint">
+          <i class="fa-regular fa-keyboard"></i> Press 1-${this.allAnswers.length} to select
+        </p>
+
+        <div class="score-panel">
+          <div class="score-item">
+            <div class="score-item-label">Score</div>
+            <div class="score-item-value">${this.quiz.score}</div>
+          </div>
         </div>
-      </div>
-    `;
-    this.container.innerHTML = questionCard;
+      </div>`;
+
     this.addEventListeners();
     this.startTimer();
   }
 
   addEventListeners() {
-    const buttons = document.querySelectorAll('.answer-btn');
-    buttons.forEach(button => {
-      button.addEventListener("click", () => this.checkAnswer(button));
+    this.container.querySelectorAll(".answer-btn").forEach((btn) => {
+      btn.addEventListener("click", () => this.checkAnswer(btn));
     });
-    document.addEventListener("keydown", this.handleKeydown);
+    document.addEventListener("keydown", this.handleKey);
   }
 
-  handleKeydown(e) {
-    const validKeys = ["1", "2", "3", "4"];
-    if (validKeys.includes(e.key)) {
-      const index = parseInt(e.key) - 1;
-      const buttons = document.querySelectorAll(".answer-btn");
-      if (buttons[index]) {
-        this.checkAnswer(buttons[index]);
-      }
-    }
+  handleKey(e) {
+    const buttons = this.container.querySelectorAll(".answer-btn");
+    const btn = buttons[Number(e.key) - 1];
+    if (btn) this.checkAnswer(btn);
   }
 
   removeEventListeners() {
-    document.removeEventListener("keydown", this.handleKeydown);
+    document.removeEventListener("keydown", this.handleKey);
   }
 
   startTimer() {
-    const timerDisplay = document.querySelector(".timer-value");
-    const timeBadge = document.querySelector(".stat-badge.timer");
+    const timerBadge = this.container.querySelector(".stat-badge.timer");
+    const timerValue = this.container.querySelector(".timer-value");
 
     this.timerInterval = setInterval(() => {
       this.timeRemaining--;
+      timerValue.textContent = this.timeRemaining;
 
-      if (timerDisplay) {
-        timerDisplay.textContent = this.timeRemaining;
+      if (this.timeRemaining <= 5) {
+        timerBadge.classList.add("warning");
       }
-
-      if (this.timeRemaining <= 5 && this.timeRemaining > 0) {
-        this.playTone(1000, 0.1);
-      }
-
-      if (this.timeRemaining <= 10 && timeBadge) {
-        timeBadge.classList.add("warning");
-      }
-
       if (this.timeRemaining <= 0) {
         this.stopTimer();
         this.handleTimeUp();
@@ -151,111 +149,77 @@ export default class Question {
   handleTimeUp() {
     this.answered = true;
     this.removeEventListeners();
-    const buttons = document.querySelectorAll(".answer-btn");
-    buttons.forEach(button => {
-      if (button.dataset.answer.toLowerCase() === this.correctAnswer.toLowerCase()) {
-        button.classList.add('correct');
-      }
+    this.highlightCorrectAnswer();
+    this.container.querySelectorAll(".answer-btn").forEach((btn) => {
+      if (!btn.classList.contains("correct-reveal")) btn.classList.add("disabled");
     });
-    this.playTone(500, 0.1);
-    setTimeout(() => this.playTone(650, 0.1), 100);
-    setTimeout(() => this.playTone(750, 0.1), 200);
-
-    const timeUp = `
-      <div class="time-up-message">
-        <i class="fa-solid fa-clock"></i> TIME'S UP!
-      </div>`;
-    document.getElementById("time-up-warning").innerHTML = timeUp;
-
-    this.animateQuestion(500);
+    this.container.querySelector(".question-card").insertAdjacentHTML(
+      "beforeend",
+      `<div class="time-up-message"><i class="fa-solid fa-clock"></i> TIME'S UP!</div>`
+    );
+    this.playSound(false);
+    this.animateQuestion();
   }
 
   checkAnswer(choiceElement) {
-    if (this.answered) {
-      return;
-    }
+    if (this.answered) return;
     this.answered = true;
     this.stopTimer();
     this.removeEventListeners();
 
-    const selectedAnswer = choiceElement.dataset.answer;
-    const buttons = document.querySelectorAll(".answer-btn");
+    const selected = choiceElement.querySelector(".answer-text").textContent;
+    const isCorrect = selected.toLowerCase() === this.correctAnswer.toLowerCase();
 
-    if (selectedAnswer.toLowerCase() === this.correctAnswer.toLowerCase()) {
-      choiceElement.classList.add('correct');
+    if (isCorrect) {
+      choiceElement.classList.add("correct");
       this.quiz.incrementScore();
-      this.playTone(500, 0.1);
-      setTimeout(() => this.playTone(650, 0.1), 100);
-      setTimeout(() => this.playTone(750, 0.1), 200);
+      this.container.querySelector(".score-item-value").textContent = this.quiz.score;
     } else {
-      choiceElement.classList.add('wrong');
+      choiceElement.classList.add("wrong");
       this.highlightCorrectAnswer();
-      this.playTone(300, 0.3);
     }
 
-    buttons.forEach(button => button.classList.add("disabled"));
-    this.animateQuestion(500);
+    this.container.querySelectorAll(".answer-btn").forEach((btn) => {
+      const isChosen = btn === choiceElement;
+      const isRevealed = btn.classList.contains("correct-reveal");
+      if (!isChosen && !isRevealed) btn.classList.add("disabled");
+    });
+
+    this.playSound(isCorrect);
+    this.animateQuestion();
   }
 
   highlightCorrectAnswer() {
-    const buttons = document.querySelectorAll(".answer-btn");
-    buttons.forEach(button => {
-      if (button.dataset.answer.toLowerCase() === this.correctAnswer.toLowerCase()) {
-        button.classList.add("correct-reveal");
-      }
+    this.container.querySelectorAll(".answer-btn").forEach((btn) => {
+      const text = btn.querySelector(".answer-text").textContent;
+      if (text === this.correctAnswer) btn.classList.add("correct-reveal");
     });
   }
 
+  playSound(isCorrect) {
+    audioCtx = audioCtx || new AudioContext();
+    const osc = audioCtx.createOscillator();
+    osc.connect(audioCtx.destination);
+    osc.type = isCorrect ? "sine" : "sawtooth";
+    osc.frequency.value = isCorrect ? 800 : 200;
+    osc.start();
+    osc.stop(audioCtx.currentTime + (isCorrect ? 0.2 : 0.4));
+  }
+
   getNextQuestion() {
-    const nextQue = this.quiz.nextQuestion();
-    if (nextQue) {
-      const newQuestion = new Question(this.quiz, this.container, this.onQuizEnd);
-      newQuestion.displayQuestion();
+    if (this.quiz.nextQuestion()) {
+      const next = new Question(this.quiz, this.container, this.onQuizEnd);
+      next.displayQuestion();
     } else {
-      const resultDiv = this.quiz.endQuiz();
-      this.container.innerHTML = resultDiv;
-      const notes = [550, 650, 800, 1020];
-      notes.forEach((freq, i) => {
-        setTimeout(() => this.playTone(freq, 0.2), i * 150);
-      });
-      const playAgainBtn = document.querySelector(".btn-restart");
-      if (playAgainBtn) {
-        playAgainBtn.addEventListener("click", () => {
-          if (this.onQuizEnd) {
-            this.onQuizEnd();
-          }
-        });
-      }
+      this.container.innerHTML = this.quiz.endQuiz();
+      this.container.querySelector(".btn-restart").addEventListener("click", this.onQuizEnd);
     }
   }
 
-  animateQuestion(duration) {
-    const questionCard = document.querySelector(".question-card");
+  animateQuestion(duration = 500) {
     setTimeout(() => {
-      if (questionCard) {
-        questionCard.classList.add("exit");
-      }
-      setTimeout(() => {
-        this.getNextQuestion();
-      }, duration);
+      this.container.querySelector(".question-card").classList.add("exit");
+      setTimeout(() => this.getNextQuestion(), duration);
     }, 1500);
-  }
-
-  playTone(frequency, duration) {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + duration);
   }
 }
