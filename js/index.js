@@ -1,97 +1,105 @@
 import Quiz from "./quiz.js";
 import Question from "./question.js";
-
-// ===== DOM =====
-const quizForm = document.getElementById("quizOptions");
-const playerNameInput = document.getElementById("playerName");
-const categoryInput = document.getElementById("categoryMenu");
-const difficultyInput = document.getElementById("difficultyOptions");
-const questionsNumber = document.getElementById("questionsNumber");
-const startQuizBtn = document.getElementById("startQuiz");
+const optionsContainer = document.getElementById("quizOptions");
 const questionsContainer = document.getElementById("questionsContainer");
-
+const questionsNumberInput = document.getElementById("questionsNumber");
+const playerNameInput = document.getElementById("playerName");
+const category = document.getElementById("categorySelect");
+const diffeculty = document.getElementById("difficultySelect");
+const startQuizBtn = document.getElementById("startQuiz");
+questionsContainer.addEventListener("click", function (e) {
+  if (e.target.closest(".retry-btn")) resetToStart();
+});
 let currentQuiz = null;
 
-// ===== Loading & Error =====
 function showLoading() {
   questionsContainer.innerHTML = `
     <div class="loading-overlay">
       <div class="loading-spinner"></div>
       <p class="loading-text">Loading Questions...</p>
-    </div>`;
+    </div>
+`;
 }
-
+function hideLoading() {
+  questionsContainer.innerHTML = "";
+}
 function showError(message) {
   questionsContainer.innerHTML = `
     <div class="game-card error-card">
-      <div class="error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <div class="error-icon">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
       <h3 class="error-title">Oops! Something went wrong</h3>
       <p class="error-message">${message}</p>
       <button class="btn-play retry-btn">
         <i class="fa-solid fa-rotate-right"></i> Try Again
       </button>
-    </div>`;
-  questionsContainer.querySelector(".retry-btn").addEventListener("click", resetToStart);
-}
+    </div>
 
-// ===== Validation =====
+`;
+}
 function validateForm() {
-  const value = questionsNumber.value;
-  if (value === "") return "Please enter the number of questions.";
-  if (Number(value) < 1) return "Minimum is 1 question.";
-  if (Number(value) > 50) return "Maximum is 50 questions.";
-  return null;
+  let obj = { isValid: false, error: null };
+  if (questionsNumberInput.value < 1)
+    obj.error = "Minimum 1 question required.";
+  else if (questionsNumberInput.value > 50)
+    obj.error = "Maximum 50 questions allowed.";
+  else if (!questionsNumberInput.value)
+    obj.error = "Please enter the number of questions";
+  else {
+    obj.isValid = true;
+  }
+  return obj;
 }
 
 function showFormError(message) {
-  const old = quizForm.querySelector(".form-error");
-  if (old) old.remove();
-
-  const div = document.createElement("div");
-  div.className = "form-error";
-  div.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${message}`;
-  startQuizBtn.before(div);
-
-  setTimeout(() => div.remove(), 3000);
+  const existing = document.querySelector(".form-error");
+  if (existing) existing.remove();
+  const errorDiv = document.createElement("div");
+  errorDiv.className = "form-error";
+  errorDiv.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${message}`;
+  startQuizBtn.before(errorDiv);
+  setTimeout(() => errorDiv.remove(), 3000);
 }
-
-// ===== Reset =====
 function resetToStart() {
   questionsContainer.innerHTML = "";
-  quizForm.style.display = "";
+  questionsNumberInput.value = 10;
+  playerNameInput.value = "";
+  category.setAttribute("data-value", "");
+  category.querySelector(".custom-select-text").textContent = "Random Category";
+  diffeculty.setAttribute("data-value", "easy");
+  diffeculty.querySelector(".custom-select-text").textContent = "Easy Mode";
+  optionsContainer.classList.remove("hidden");
   currentQuiz = null;
 }
-
-// ===== Start =====
 async function startQuiz() {
-  const error = validateForm();
-  if (error) {
-    showFormError(error);
+  const valid = validateForm();
+  if (!valid.isValid) {
+    showFormError(valid.error);
     return;
   }
+  let categoryId = category.getAttribute("data-value");
+  let diffecultyId = diffeculty.getAttribute("data-value");
+  const questionsNumber = questionsNumberInput.value;
+  const playerName = playerNameInput.value;
 
-  currentQuiz = new Quiz(
-    playerNameInput.value.trim() || "Player",
-    categoryInput.value,
-    difficultyInput.value,
-    Number(questionsNumber.value)
-  );
-
-  quizForm.style.display = "none";
+  currentQuiz = new Quiz(categoryId, diffecultyId, questionsNumber, playerName);
+  optionsContainer.classList.add("hidden");
   showLoading();
-
   try {
     await currentQuiz.getQuestions();
-    const firstQuestion = new Question(currentQuiz, questionsContainer, resetToStart);
-    firstQuestion.displayQuestion();
-  } catch (err) {
-    showError(err.message);
+    hideLoading();
+    let question = new Question(currentQuiz, questionsContainer, resetToStart);
+    question.displayQuestion();
+  } catch (error) {
+    hideLoading();
   }
 }
-
-// ===== Events =====
-quizForm.addEventListener("submit", (e) => e.preventDefault());
-startQuizBtn.addEventListener("click", startQuiz);
-questionsNumber.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") startQuiz();
+startQuizBtn.addEventListener("click", async function () {
+  await startQuiz();
+});
+questionsNumberInput.addEventListener("keydown", async function (e) {
+  if (e.key === "Enter") {
+    await startQuiz();
+  }
 });
