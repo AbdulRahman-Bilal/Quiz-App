@@ -7,6 +7,7 @@ import Question from "./question.js";
 import ResultsView from "./results-view.js";
 import UIController from "./ui-controls.js";
 import { escapeHtml } from "./utils.js";
+import { sounds } from "./sound-manager.js";
 
 class QuizApp {
   static MIN_QUESTIONS = 1;
@@ -152,6 +153,7 @@ class QuizApp {
       this.playerNameInput.value,
     );
 
+    sounds.unlock(); // the click on Start allows audio to play later
     this.isLoading = true;
     this.optionsContainer.classList.add("hidden");
     this.showLoading();

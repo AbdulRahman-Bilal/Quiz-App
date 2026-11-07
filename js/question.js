@@ -3,6 +3,7 @@
  * timer, validates the chosen answer and moves on to the next question.
  */
 import { decodeHtml, escapeHtml, shuffle } from "./utils.js";
+import { sounds } from "./sound-manager.js";
 
 export default class Question {
   static TIME_LIMIT = 15;
@@ -164,6 +165,7 @@ export default class Question {
   handleTimeUp() {
     if (this.answered) return;
     this.lock();
+    sounds.playWrong();
     this.highlightCorrectAnswer();
     this.answerBtns.forEach((btn) => btn.classList.add("disabled"));
     this.card.querySelector(".time-up-message").classList.remove("hidden");
@@ -177,11 +179,13 @@ export default class Question {
     const selected = choiceElement.getAttribute("data-answer");
     if (selected === this.correctAnswer) {
       choiceElement.classList.add("correct");
+      sounds.playCorrect();
       this.quiz.incrementScore();
       this.card.querySelector(".score-item-value").textContent =
         this.quiz.score;
     } else {
       choiceElement.classList.add("wrong");
+      sounds.playWrong();
       this.highlightCorrectAnswer();
     }
     this.answerBtns.forEach((btn) => {
