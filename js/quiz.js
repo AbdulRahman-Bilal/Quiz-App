@@ -1,82 +1,130 @@
 export default class Quiz {
-  constructor(playerName, category, difficulty, numberOfQuestions) {
+  constructor(categoryId, diffecultyId, questionsNumber, playerName) {
+    this.category = categoryId;
+    this.difficulty = diffecultyId;
+    this.numberOfQuestions = Number(questionsNumber);
     this.playerName = playerName;
-    this.category = category;
-    this.difficulty = difficulty;
-    this.numberOfQuestions = numberOfQuestions;
+    this.score = 0;
     this.questions = [];
     this.currentQuestionIndex = 0;
-    this.score = 0;
   }
-
   async getQuestions() {
-    let url = `https://opentdb.com/api.php?amount=${this.numberOfQuestions}&difficulty=${this.difficulty}`;
-    if (this.category) {
-      url += `&category=${this.category}`;
+    const res = await fetch(
+      this.buildApiUrl(this.category, this.difficulty, this.numberOfQuestions),
+    );
+    if (!res.ok) {
+      throw Error("error in fetching api");
+      return;
     }
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.response_code === 5) {
-      throw new Error("Too many requests. Wait 5 seconds and try again.");
+    const data = await res.json();
+    if (!(data.response_code === 0)) {
+      throw Error("error in return from api");
     }
-    if (data.response_code !== 0) {
-      throw new Error("Not enough questions for these options. Try fewer questions.");
-    }
-
     this.questions = data.results;
+    return this.questions;
   }
-
-  getCurrentQuestion() {
-    return this.questions[this.currentQuestionIndex];
+  buildApiUrl(category, difficulty, numberOfQuestions) {
+    return `https://opentdb.com/api.php?amount=${numberOfQuestions}&category=${category}&difficulty=${difficulty}&type=multiple`;
   }
-
   incrementScore() {
     this.score++;
   }
-
+  getCurrentQuestion() {
+    if (this.currentQuestionIndex >= this.questions.length) {
+      return null;
+    } else return this.questions[this.currentQuestionIndex];
+  }
   nextQuestion() {
     this.currentQuestionIndex++;
-    return this.currentQuestionIndex < this.questions.length;
+    if (this.currentQuestionIndex == this.questions.length) {
+      return false;
+    } else {
+      return true;
+    }
   }
-
+  isComplete() {
+    if (this.currentQuestionIndex >= this.questions.length) {
+      return true;
+    } else return false;
+  }
+  getScorePercentage() {
+    const per = (this.score / this.numberOfQuestions) * 100;
+    return Math.round(per);
+  }
+  saveHighScore() {
+    let highScores = this.getHighScores();
+    const newScore = {
+      name: this.playerName,
+      score: this.score,
+      total: this.numberOfQuestions,
+      percentage: this.getScorePercentage(),
+      difficulty: this.difficulty,
+      date: Date.now(),
+    };
+    highScores.push(newScore);
+    highScores.sort((a, b) => b.percentage - a.percentage);
+    if (highScores.length > 10) highScores.splice(10, 1);
+    localStorage.setItem("quizHighScores", JSON.stringify(highScores));
+  }
+  getHighScores() {
+    try {
+      return localStorage.getItem("quizHighScores")
+        ? JSON.parse(localStorage.getItem("quizHighScores"))
+        : [];
+    } catch (error) {
+      console.log(error);
+      return [];
+    }
+  }
+  isHighScore() {
+    const highScores = this.getHighScores();
+    if (
+      highScores.length < 10 ||
+      this.getScorePercentage() > highScores[highScores.length - 1].percentage
+    )
+      return true;
+    else return false;
+  }
   endQuiz() {
-    const percentage = Math.round((this.score / this.numberOfQuestions) * 100);
-
-    const oldScores = JSON.parse(localStorage.getItem("leaderboard")) || [];
-    const isRecord = percentage > 0 && oldScores.every((p) => percentage > p.percentage);
-
-    oldScores.push({ name: this.playerName, percentage });
-    oldScores.sort((a, b) => b.percentage - a.percentage);
-    const top3 = oldScores.slice(0, 3);
-    localStorage.setItem("leaderboard", JSON.stringify(top3));
-
-    const medals = ["gold", "silver", "bronze"];
-    const rows = top3
-      .map(
-        (p, i) => `
-        <li class="leaderboard-item ${medals[i]}">
-          <span class="leaderboard-rank">#${i + 1}</span>
-          <span class="leaderboard-name">${p.name}</span>
-          <span class="leaderboard-score">${p.percentage}%</span>
-        </li>`
-      )
-      .join("");
-
+    const currentScorePercentage = this.getScorePercentage();
+    if (this.isHighScore()) {
+      this.saveHighScore();
+    }
+    const highScores = this.getHighScores();
     return `
-      <div class="game-card results-card">
-        <h2 class="results-title">Quiz Complete!</h2>
-        <p class="results-score-display">${this.score}/${this.numberOfQuestions}</p>
-        <p class="results-percentage">${percentage}% Accuracy</p>
-        ${isRecord ? `<div class="new-record-badge"><i class="fa-solid fa-star"></i> New High Score!</div>` : ""}
-        <div class="leaderboard">
-          <h4 class="leaderboard-title"><i class="fa-solid fa-trophy"></i> Leaderboard</h4>
-          <ul class="leaderboard-list">${rows}</ul>
-        </div>
-        <div class="action-buttons">
-          <button class="btn-restart"><i class="fa-solid fa-rotate-right"></i> Play Again</button>
-        </div>
-      </div>`;
+    <div class="game-card results-card">
+      <h2 class="results-title">Quiz Complete!</h2>
+      <p class="results-score-display">${this.score}/${this.numberOfQuestions}</p>
+      <p class="results-percentage">${this.getScorePercentage()}% Accuracy</p>
+      ${this.isHighScore()? `<div class="new-record-badge">
+        <i class="fa-solid fa-star"></i> New High Score!
+      </div>`:""
+      }
+      <div class="leaderboard">
+        <h4 class="leaderboard-title">
+          <i class="fa-solid fa-trophy"></i> Leaderboard
+        </h4>
+        <ul class="leaderboard-list">
+        ${highScores.map((score, index) => {
+          let rankClass = "";
+          if (index === 0) rankClass = "gold";
+          else if (index === 1) rankClass = "silver";
+          else if (index === 2) rankClass = "bronze";
+          return `<li class="leaderboard-item ${rankClass}">
+            <span class="leaderboard-rank">#${index + 1}</span>
+            <span class="leaderboard-name">${score.name?score.name:"Player "+(index+1)}</span>
+            <span class="leaderboard-score">${score.percentage}%</span>
+          </li>`;
+        }).join("")}
+        </ul>
+      </div>
+      
+      <div class="action-buttons">
+        <button id="restartQuiz" class="btn-restart">
+          <i class="fa-solid fa-rotate-right"></i> Play Again
+        </button>
+      </div>
+    </div>
+    `;
   }
 }
