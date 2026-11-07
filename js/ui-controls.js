@@ -1,79 +1,115 @@
 /**
- * @fileoverview UI Controls - Custom select dropdowns and number input handlers
- * Extracted from inline HTML for better organization
+ * @fileoverview UIController - custom select dropdowns and number-input
+ * stepper buttons. Owns the DOM wiring for the setup form controls.
  */
+export default class UIController {
+  /**
+   * @param {Document|HTMLElement} [root=document]
+   */
+  constructor(root = document) {
+    this.root = root;
+    this.selects = [...root.querySelectorAll(".custom-select")];
+    this.numberButtons = [...root.querySelectorAll(".number-btn")];
+    this.init();
+  }
 
-/**
- * Initialize custom select dropdowns
- */
-function initCustomSelects() {
-  document.querySelectorAll('.custom-select').forEach(select => {
-    const trigger = select.querySelector('.custom-select-trigger');
-    const options = select.querySelectorAll('.custom-select-option');
-    const hiddenInput = select.parentElement.querySelector('input[type="hidden"]');
-    const textSpan = trigger.querySelector('.custom-select-text');
-    const iconSpan = trigger.querySelector('.custom-select-icon');
+  init() {
+    this.initCustomSelects();
+    this.initNumberInputs();
+    this.initClickOutside();
+  }
 
-    trigger.addEventListener('click', (e) => {
-      e.stopPropagation();
-      document.querySelectorAll('.custom-select.open').forEach(s => {
-        if (s !== select) s.classList.remove('open');
+  /* ---------- custom selects ---------- */
+
+  initCustomSelects() {
+    this.selects.forEach((select) => {
+      // Remember the initial value so reset() can restore it.
+      select.dataset.default = select.dataset.value ?? "";
+
+      const trigger = select.querySelector(".custom-select-trigger");
+      trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.closeAllSelects(select);
+        select.classList.toggle("open");
       });
-      select.classList.toggle('open');
-    });
 
-    options.forEach(option => {
-      option.addEventListener('click', () => {
-        const value = option.dataset.value;
-        const icon = option.querySelector('i').outerHTML;
-        const text = option.textContent.trim();
-
-        select.dataset.value = value;
-        if (hiddenInput) hiddenInput.value = value;
-        textSpan.textContent = text;
-        iconSpan.innerHTML = icon;
-
-        options.forEach(o => o.classList.remove('selected'));
-        option.classList.add('selected');
-        select.classList.remove('open');
+      select.querySelectorAll(".custom-select-option").forEach((option) => {
+        option.addEventListener("click", () =>
+          this.selectOption(select, option),
+        );
       });
     });
-  });
-}
+  }
 
-/**
- * Initialize number input custom buttons
- */
-function initNumberInputs() {
-  document.querySelectorAll('.number-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const wrapper = btn.closest('.number-input-wrapper');
-      const input = wrapper.querySelector('input[type="number"]');
-      const min = parseInt(input.min) || 1;
-      const max = parseInt(input.max) || 50;
-      let value = parseInt(input.value) || min;
+  /** Apply an option to its select: value, label, icon and highlight. */
+  selectOption(select, option) {
+    const hiddenInput = select.parentElement.querySelector(
+      'input[type="hidden"]',
+    );
+    const textSpan = select.querySelector(".custom-select-text");
+    const iconSpan = select.querySelector(".custom-select-icon");
+    const icon = option.querySelector("i");
 
-      if (btn.dataset.action === 'increment' && value < max) {
-        input.value = value + 1;
-      } else if (btn.dataset.action === 'decrement' && value > min) {
-        input.value = value - 1;
-      }
+    select.dataset.value = option.dataset.value;
+    if (hiddenInput) hiddenInput.value = option.dataset.value;
+    textSpan.textContent = option.textContent.trim();
+    if (icon) iconSpan.innerHTML = icon.outerHTML;
+
+    select
+      .querySelectorAll(".custom-select-option")
+      .forEach((o) => o.classList.toggle("selected", o === option));
+    select.classList.remove("open");
+  }
+
+  closeAllSelects(except = null) {
+    this.root.querySelectorAll(".custom-select.open").forEach((s) => {
+      if (s !== except) s.classList.remove("open");
     });
-  });
-}
+  }
 
-/**
- * Close dropdowns when clicking outside
- */
-function initClickOutside() {
-  document.addEventListener('click', () => {
-    document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
-  });
-}
+  initClickOutside() {
+    document.addEventListener("click", () => this.closeAllSelects());
+  }
 
-// Initialize all UI controls when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  initCustomSelects();
-  initNumberInputs();
-  initClickOutside();
-});
+  /** @returns {string} the current value of a custom select */
+  getSelectValue(select) {
+    return select.dataset.value ?? "";
+  }
+
+  /** Restore every custom select to the value it had on page load. */
+  resetSelects() {
+    this.selects.forEach((select) => {
+      const option = [...select.querySelectorAll(".custom-select-option")].find(
+        (o) => o.dataset.value === select.dataset.default,
+      );
+      if (option) this.selectOption(select, option);
+    });
+  }
+
+  /* ---------- number input ---------- */
+
+  initNumberInputs() {
+    this.numberButtons.forEach((btn) => {
+      btn.addEventListener("click", () => this.stepNumber(btn));
+    });
+  }
+
+  stepNumber(btn) {
+    const input = btn
+      .closest(".number-input-wrapper")
+      .querySelector('input[type="number"]');
+    const min = parseInt(input.min, 10) || 1;
+    const max = parseInt(input.max, 10) || 50;
+    const value = parseInt(input.value, 10) || min;
+
+    if (btn.dataset.action === "increment" && value < max) {
+      input.value = value + 1;
+    } else if (btn.dataset.action === "decrement" && value > min) {
+      input.value = value - 1;
+    } else if (btn.dataset.action === "increment") {
+      input.value = max;
+    } else if (btn.dataset.action === "decrement") {
+      input.value = min;
+    }
+  }
+}
